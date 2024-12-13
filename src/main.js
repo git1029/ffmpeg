@@ -2,7 +2,7 @@ import "./style.css";
 import p5 from "p5";
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL } from "@ffmpeg/util";
+import { toBlobURL, fetchFile } from "@ffmpeg/util";
 
 // const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -131,14 +131,61 @@ const captureFrame = async () => {
 };
 
 const createVideo = async () => {
-  // Convert frames into video
+  // Convert frames into video file at videos/output.mp4
   await ffmpeg
     .exec(options.video.exec)
     .catch((err) => console.log(err.message));
 
+  // Save input video to ffmpeg
+  const videoFile = await fetchFile(videoUrl);
+  await ffmpeg.writeFile("videos/video.mp4", videoFile);
+
+  // Get first second of input video and save to file videos/first.mp4
+  // Also convert clip fps to same as output
+  await ffmpeg
+    .exec([
+      "-ss",
+      "0",
+      "-i",
+      "videos/video.mp4",
+      "-t",
+      "1",
+      "-map",
+      "0",
+      "-c",
+      "copy",
+      "-r",
+      `${fps}`,
+      "videos/first.mp4",
+    ])
+    .catch((err) => console.log(err.message));
+
+  // Create text file with list of videos to combine (note file path relative to text file)
+  const textFile = new Blob([`file first.mp4\nfile output.mp4`], {
+    type: "text/plain",
+  });
+  const textBuffer = new Uint8Array(await textFile.arrayBuffer());
+  await ffmpeg.writeFile("videos/list.txt", textBuffer);
+
+  // Join videos
+  await ffmpeg.exec([
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    "videos/list.txt",
+    "-c",
+    "copy",
+    "-r",
+    `${fps}`,
+    "videos/final.mp4",
+  ]);
+
   // Download output file
   const filename = `output_${new Date().toISOString()}.${options.video.ext}`;
-  const filePath = `videos/${options.video.filename}`;
+  // const filePath = `videos/${options.video.filename}`;
+  const filePath = "videos/final.mp4";
   const file = await ffmpeg.readFile(filePath);
   if (typeof file !== "string") {
     // file: FileData typeof Uint8Array | string
