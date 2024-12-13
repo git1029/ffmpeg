@@ -2,9 +2,9 @@ import "./style.css";
 import p5 from "p5";
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL, fetchFile } from "@ffmpeg/util";
+import { toBlobURL } from "@ffmpeg/util";
 
-const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const downloadFile = (data, filename) => {
   const url = URL.createObjectURL(data);
@@ -36,6 +36,7 @@ const loadFFmpeg = async () => {
   const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.4/dist/esm";
   if (ffmpeg === null) {
     ffmpeg = new FFmpeg();
+
     ffmpeg.on("log", ({ message }) => {
       console.log("log", message);
     });
@@ -43,6 +44,7 @@ const loadFFmpeg = async () => {
       console.log("progress", progress);
     });
 
+    // Load ffmpeg files
     try {
       // toBlobURL is used to bypass CORS issue, urls with the same
       // domain can be used directly.
@@ -82,6 +84,9 @@ const deleteFiles = async (dir) => {
   await ffmpeg.deleteDir(dir);
 };
 
+// Ffmpeg settings
+// exec is what ffmpeg uses to convert a list of pngs (frames/0.png, frames/1.png, ...) into an mp4 video
+// compression and bitrate can be set with the preset and crf options
 const options = {
   video: {
     type: "video/mp4",
@@ -126,89 +131,14 @@ const captureFrame = async () => {
 };
 
 const createVideo = async () => {
+  // Convert frames into video
   await ffmpeg
     .exec(options.video.exec)
     .catch((err) => console.log(err.message));
 
-  // // Load video into ffmpeg
-  // const videoFile = await fetchFile(videoUrl);
-  // await ffmpeg.writeFile("videos/video.mp4", videoFile);
-
-  // // Get first second of input video
-  // await ffmpeg
-  //   .exec([
-  //     "-i",
-  //     "videos/video.mp4",
-  //     "-ss",
-  //     "0",
-  //     "-t",
-  //     "1",
-  //     "-map",
-  //     "0",
-  //     "-c",
-  //     "copy",
-  //     "videos/first.mp4",
-  //   ])
-  //   .catch((err) => console.log(err.message));
-
-  // // Combine videos
-  // await ffmpeg
-  //   .exec([
-  //     // "-i",
-  //     // "videos/first.mp4",
-  //     // "-i",
-  //     // "videos/output.mp4",
-  //     // "-filter_complex",
-  //     // "hstack",
-  //     // "videos/final.mp4",
-
-  //     // "-f",
-  //     // "concat",
-  //     // // "-safe",
-  //     // // "0",
-  //     // "-i",
-  //     // "join_video.txt",
-  //     // "-c",
-  //     // "copy",
-  //     // "videos/final.mp4",
-
-  //     "-f",
-  //     "concat",
-  //     "-i",
-  //     "videos/first.mp4",
-  //     "-i",
-  //     "videos/output.mp4",
-  //     "-codec",
-  //     "copy",
-  //     "videos/final.mp4",
-  //   ])
-  //   .catch((err) => console.log(err.message));
-
-  // const test = await ffmpeg.listDir("videos");
-  // console.log(test);
-
-  // // Overlay videos
-  // await ffmpeg.exec([
-  //   "-i",
-  //   "videos/video.mp4",
-  //   "-i",
-  //   "videos/output.mp4",
-  //   "-filter_complex",
-  //   "'[0][overlay]; [1][overlay]'",
-  //   "-map",
-  //   "0",
-  //   "-c",
-  //   "copy",
-  //   "videos/final.mp4",
-  // ]);
-
-  // const file2 = await ffmpeg.readFile("videos/final.mp4");
-  // console.log(file2);
-
-  // Download files
+  // Download output file
   const filename = `output_${new Date().toISOString()}.${options.video.ext}`;
   const filePath = `videos/${options.video.filename}`;
-  // const filePath = `videos/output.mp4`;
   const file = await ffmpeg.readFile(filePath);
   if (typeof file !== "string") {
     // file: FileData typeof Uint8Array | string
@@ -216,6 +146,7 @@ const createVideo = async () => {
     downloadFile(data, filename);
   }
 
+  // Delete files in ffmpeg directory
   await deleteFiles("frames");
   await deleteFiles("videos");
 
@@ -228,12 +159,11 @@ const createVideo = async () => {
 };
 
 const onVideoSeeked = async () => {
-  // console.log("seeked");
-
   await captureFrame(i);
 
   i++;
 
+  // Remove listener when reach end of video
   if (i >= frames) {
     await createVideo();
 
@@ -259,21 +189,15 @@ const capture = async () => {
   recording = true;
   document.body.classList.add("recording");
   renderer.animate(0);
-
-  // video.time(0);
   video.pause();
-
-  const joinFile = await fetchFile("/join_video.txt");
-  await ffmpeg.writeFile("join_video.txt", joinFile);
-  // console.log(joinFile);
-
-  console.log(await ffmpeg.listDir("/"));
 
   // Create ffmpeg directory for canvas images
   await ffmpeg.createDir("frames");
   await ffmpeg.createDir("videos");
 
   video.time(i);
+
+  // Setup video time seek listener so render is captured once new frame/time has loaded
   video.elt.addEventListener("seeked", onVideoSeeked);
 };
 
